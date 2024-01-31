@@ -1,0 +1,14 @@
+02-ws-js/Config
+02-ws-js/ConfigCommon
+02-ws-js/ConfigQuery
+02-ws-js/Net
+02-ws-js/target
+02-ws-js/ClassDefine.js
+02-ws-js/CommonDefine.js
+02-ws-js/ConfigDefine.js
+02-ws-js/EditorDefine.js
+02-ws-js/HttpCodeDefine.js
+02-ws-js/LogDefine.js
+02-ws-js/QueryTypeDefine.js
+02-ws-js/message.proto
+**/*.so
