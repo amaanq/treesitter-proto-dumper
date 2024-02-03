@@ -39,70 +39,101 @@
                              body:
                                 (switch_body (switch_case
                                   value: (number) @field_id
-                                  body: (expression_statement
-                                          [
-                                            ; Single items
-                                            (assignment_expression
-                                            left: (member_expression (identifier) (property_identifier) @field_name)
-                                            right: [
-                                                    ; Single primitive
-                                                    (call_expression
-                                                      function: (member_expression
-                                                      object: (identifier)
-                                                      property: (property_identifier) @field_type))
-
-                                                    ; Single non-primitive
-                                                    (call_expression
-                                                      function: (member_expression
-                                                        object: (member_expression
-                                                          object: (member_expression) @_rootakiprotocol
-                                                          property: (property_identifier) @field_type
-                                                          (#eq? @_rootakiprotocol "$root.Aki.Protocol"))
-                                                        property: (property_identifier) @_decode_field
-                                                        (#eq? @_decode_field "decode")))
-                                                  ])
-
-                                            ; Repeated items
-                                            (sequence_expression
-                                              (binary_expression)
-                                              (call_expression
-                                                function: (member_expression
-                                                  object: (member_expression
-                                                          object: (identifier)
-                                                          property: (property_identifier) @field_name)
-                                                  property: ((property_identifier) @push
-                                                            (#eq? @push "push")))
-
-                                                arguments: (arguments
-                                                  [
-                                                    ; Repeated primitive
-                                                    (call_expression
-                                                      function: (member_expression
+                                  body: [
+                                          (expression_statement
+                                            [
+                                              ; Single items
+                                              (assignment_expression
+                                              left: (member_expression (identifier) (property_identifier) @field_name)
+                                              right: [
+                                                      ; Single primitive
+                                                      (call_expression
+                                                        function: (member_expression
                                                         object: (identifier)
                                                         property: (property_identifier) @field_type))
 
-                                                    ; Repeated non-primitive
+                                                      ; Single non-primitive
+                                                      (call_expression
+                                                        function: (member_expression
+                                                          object: (member_expression
+                                                            object: (member_expression) @_rootakiprotocol
+                                                            property: (property_identifier) @field_type
+                                                            (#eq? @_rootakiprotocol "$root.Aki.Protocol"))
+                                                          property: (property_identifier) @_decode_field
+                                                          (#eq? @_decode_field "decode")))
+                                                    ])
+
+                                              ; Repeated items
+                                              (sequence_expression
+                                                (binary_expression)
+                                                (call_expression
+                                                  function: (member_expression
+                                                    object: (member_expression
+                                                            object: (identifier)
+                                                            property: (property_identifier) @field_name)
+                                                    property: ((property_identifier) @push
+                                                              (#eq? @push "push")))
+
+                                                  arguments: (arguments
+                                                    [
+                                                      ; Repeated primitive
+                                                      (call_expression
+                                                        function: (member_expression
+                                                          object: (identifier)
+                                                          property: (property_identifier) @field_type))
+
+                                                      ; Repeated non-primitive
+                                                      (call_expression
+                                                        function: (member_expression
+                                                          object: (member_expression
+                                                            object: (member_expression) @_rootakiprotocol
+                                                            property: (property_identifier) @field_type
+                                                            (#eq? @_rootakiprotocol "$root.Aki.Protocol"))
+                                                          property: (property_identifier) @_decode_field
+                                                          (#eq? @_decode_field "decode")))
+                                                    ])
+                                              ))
+
+                                              ; Map items
+                                              (binary_expression
+                                                left: (binary_expression
+                                                  left: (member_expression
+                                                          (identifier)
+                                                          (property_identifier) @field_name)
+                                                  operator: "==="
+                                                  right: (member_expression) @_util_emptyobject
+                                                  (#eq? @_util_emptyobject "$util.emptyObject")))
+                                            ])
+
+                                          (if_statement
+                                            consequence: (for_statement
+                                              body: (expression_statement
                                                     (call_expression
                                                       function: (member_expression
                                                         object: (member_expression
-                                                          object: (member_expression) @_rootakiprotocol
-                                                          property: (property_identifier) @field_type
-                                                          (#eq? @_rootakiprotocol "$root.Aki.Protocol"))
-                                                        property: (property_identifier) @_decode_field
-                                                        (#eq? @_decode_field "decode")))
-                                                  ])
-                                            ))
-
-                                            ; Map items
-                                            (binary_expression
-                                              left: (binary_expression
-                                                left: (member_expression
-                                                        (identifier)
-                                                        (property_identifier) @field_name)
-                                                operator: "==="
-                                                right: (member_expression) @_util_emptyobject
-                                                (#eq? @_util_emptyobject "$util.emptyObject")))
-                                          ])
+                                                                object: (identifier)
+                                                                property: (property_identifier) @field_name)
+                                                        property: ((property_identifier) @push
+                                                                  (#eq? @push "push")))
+                                                      arguments: (arguments
+                                                        [
+                                                          ; Repeated primitive
+                                                          (call_expression
+                                                            function: (member_expression
+                                                              object: (identifier)
+                                                              property: (property_identifier) @field_type))
+                                                          ; Repeated non-primitive
+                                                          (call_expression
+                                                            function: (member_expression
+                                                              object: (member_expression
+                                                                object: (member_expression) @_rootakiprotocol
+                                                                property: (property_identifier) @field_type
+                                                                (#eq? @_rootakiprotocol "$root.Aki.Protocol"))
+                                                              property: (property_identifier) @_decode_field
+                                                              (#eq? @_decode_field "decode")))
+                                                        ])
+                                          ))))
+                                        ]
                                   body: (variable_declaration)?
                                   ; Map body, if present, in some cases there's a statement block, in some it's a switch statement
                                   ; seems like some cases with inlined assigns omit the braces - for (s = "", c = null; t.pos < a;) switch ((u = t.uint32()) >>> 3) { ... }
@@ -244,6 +275,46 @@
                                       ]
                            )))
 
+                           ; Inlined ternary into if statement for repeated...
+                           (if_statement
+                             condition: (parenthesized_expression
+                                (binary_expression
+                                  left: (binary_expression
+                                    left: (identifier)
+                                    operator: ">>>"
+                                    right: (number) @_shift3
+                                    (#eq? @_shift3 "3"))
+                                  "=="
+                                  right: (number) @field_id))
+                             consequence: (if_statement
+                                consequence: (for_statement
+                                  body: (expression_statement
+                                         (call_expression
+                                           function: (member_expression
+                                             object: (member_expression
+                                                     object: (identifier)
+                                                     property: (property_identifier) @field_name)
+                                             property: ((property_identifier) @push
+                                                       (#eq? @push "push")))
+                                           arguments: (arguments
+                                             [
+                                               ; Repeated primitive
+                                               (call_expression
+                                                 function: (member_expression
+                                                   object: (identifier)
+                                                   property: (property_identifier) @field_type))
+                                               ; Repeated non-primitive
+                                               (call_expression
+                                                 function: (member_expression
+                                                   object: (member_expression
+                                                     object: (member_expression) @_rootakiprotocol
+                                                     property: (property_identifier) @field_type
+                                                     (#eq? @_rootakiprotocol "$root.Aki.Protocol"))
+                                                   property: (property_identifier) @_decode_field
+                                                   (#eq? @_decode_field "decode")))
+                                             ])
+                             )))))
+
                            ; Inlined ternary into if statement for maps...
                            (if_statement
                               condition: (parenthesized_expression
@@ -256,6 +327,15 @@
                                   "=="
                                   right: (number) @field_id))
                               consequence: (statement_block
+                                (expression_statement
+                                  (binary_expression
+                                    left: (binary_expression
+                                      left: (member_expression
+                                              (identifier)
+                                              (property_identifier) @field_name)
+                                      operator: "==="
+                                      right: (member_expression) @_util_emptyobject
+                                      (#eq? @_util_emptyobject "$util.emptyObject"))))
                                 (for_statement
                                   body: [
                                           (statement_block

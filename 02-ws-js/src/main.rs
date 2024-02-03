@@ -141,9 +141,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             en.fields.iter().fold(String::new(), |mut output, field| {
                 let _ = writeln!(
                     output,
-                    "  {}_{} = {};",
-                    en.name.to_shouty_snake_case(),
-                    field.0.to_shouty_snake_case(),
+                    "  {} = {};",
+                    if !field
+                        .0
+                        .to_shouty_snake_case()
+                        .starts_with(&en.name.to_shouty_snake_case())
+                    {
+                        format!(
+                            "{}_{}",
+                            en.name.to_shouty_snake_case(),
+                            field.0.to_shouty_snake_case()
+                        )
+                    } else {
+                        field.0.to_shouty_snake_case()
+                    },
                     field.1
                 );
                 output
