@@ -7,7 +7,20 @@ use tree_sitter::{Parser, Query, QueryCursor, Tree};
 struct Message {
     name: String,
     id: Option<i32>,
-    fields: Vec<(i32, String, String)>,
+    fields: Vec<Field>,
+}
+
+struct Field {
+    id: i32,
+    name: String,
+    _type: FieldType,
+}
+
+#[derive(Clone, Debug)]
+enum FieldType {
+    Single(String),
+    Repeated(String),
+    Map(String, String),
 }
 
 struct Enum {
@@ -104,9 +117,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let _ = writeln!(
                         output,
                         "  {} {} = {};",
-                        field.2,
-                        field.1.to_snake_case(),
-                        field.0
+                        match &field._type {
+                            FieldType::Single(t) => t.clone(),
+                            FieldType::Repeated(t) => format!("repeated {t}"),
+                            FieldType::Map(k, v) => format!("map<{k}, {v}>"),
+                        },
+                        field.name.to_snake_case(),
+                        field.id
                     );
                     output
                 })
@@ -124,7 +141,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             en.fields.iter().fold(String::new(), |mut output, field| {
                 let _ = writeln!(
                     output,
-                    "  {} = {};",
+                    "  {}_{} = {};",
+                    en.name.to_shouty_snake_case(),
                     field.0.to_shouty_snake_case(),
                     field.1
                 );
@@ -176,6 +194,19 @@ fn parse_messages(state: &mut State) -> Result<(), Box<dyn std::error::Error>> {
         .capture_index_for_name("field_type")
         .unwrap();
 
+    // repeated fields
+    let push_idx = state.message_query.capture_index_for_name("push").unwrap();
+
+    // map fields
+    let kv_id_idx = state.message_query.capture_index_for_name("kv_id").unwrap();
+    let kv_field_type_idx = state
+        .message_query
+        .capture_index_for_name("kv_field_type")
+        .unwrap();
+
+    let mut field_type = None;
+    let mut do_push = true;
+
     for m in matches {
         if m.captures.is_empty() {
             continue;
@@ -184,7 +215,7 @@ fn parse_messages(state: &mut State) -> Result<(), Box<dyn std::error::Error>> {
         let mut message_name = String::new();
         let mut field_id = String::new();
         let mut field_name = String::new();
-        let mut field_type = String::new();
+        let mut kv_field_id = 0;
 
         for capture in m.captures {
             let node_text = capture
@@ -199,25 +230,70 @@ fn parse_messages(state: &mut State) -> Result<(), Box<dyn std::error::Error>> {
             } else if capture.index == field_name_idx {
                 field_name = node_text;
             } else if capture.index == field_type_idx {
-                field_type = node_text;
+                if let Some(FieldType::Repeated(ref mut t)) = field_type {
+                    *t = node_text;
+                } else {
+                    field_type = Some(FieldType::Single(node_text));
+                }
+            } else if capture.index == push_idx {
+                if let Some(FieldType::Single(text)) = field_type {
+                    field_type = Some(FieldType::Repeated(text));
+                } else {
+                    field_type = Some(FieldType::Repeated(String::new()));
+                }
+            } else if capture.index == kv_id_idx {
+                kv_field_id = node_text.parse()?;
+            } else if capture.index == kv_field_type_idx {
+                if let Some(FieldType::Map(ref mut key_type, ref mut value_type)) = field_type {
+                    if kv_field_id == 1 {
+                        *key_type = node_text;
+                    } else if kv_field_id == 2 {
+                        *value_type = node_text;
+                    } else {
+                        panic!("Unexpected kv_field_id: {kv_field_id}");
+                    }
+                    do_push = true;
+                } else {
+                    field_type = if kv_field_id == 1 {
+                        Some(FieldType::Map(node_text, String::new()))
+                    } else if kv_field_id == 2 {
+                        Some(FieldType::Map(String::new(), node_text))
+                    } else {
+                        panic!("Unexpected kv_field_id: {kv_field_id}");
+                    };
+                    do_push = false;
+                }
             }
         }
 
-        if state.messages.contains_key(&message_name) {
-            state.messages.get_mut(&message_name).unwrap().fields.push((
-                field_id.parse()?,
-                field_name,
-                field_type,
-            ));
-        } else {
-            state.messages.insert(
-                message_name.clone(),
-                Message {
-                    name: message_name,
-                    id: None,
-                    fields: vec![(field_id.parse()?, field_name, field_type)],
-                },
-            );
+        if do_push {
+            if state.messages.contains_key(&message_name) {
+                state
+                    .messages
+                    .get_mut(&message_name)
+                    .unwrap()
+                    .fields
+                    .push(Field {
+                        id: field_id.parse()?,
+                        name: field_name,
+                        _type: field_type.unwrap(),
+                    });
+            } else {
+                state.messages.insert(
+                    message_name.clone(),
+                    Message {
+                        name: message_name,
+                        id: None,
+                        fields: vec![Field {
+                            id: field_id.parse()?,
+                            name: field_name,
+                            _type: field_type.unwrap(),
+                        }],
+                    },
+                );
+            }
+
+            field_type = None;
         }
     }
 
@@ -225,7 +301,6 @@ fn parse_messages(state: &mut State) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn parse_enums(state: &mut State) -> Result<(), Box<dyn std::error::Error>> {
-    let object_idx = state.enum_query.capture_index_for_name("object").unwrap();
     let enum_name_idx = state
         .enum_query
         .capture_index_for_name("enum_name")
@@ -238,7 +313,6 @@ fn parse_enums(state: &mut State) -> Result<(), Box<dyn std::error::Error>> {
         .enum_query
         .capture_index_for_name("enum_value")
         .unwrap();
-    let stage2_idx = state.enum_query.capture_index_for_name("stage2").unwrap();
 
     let matches = state.cursor.matches(
         &state.enum_query,
@@ -246,19 +320,15 @@ fn parse_enums(state: &mut State) -> Result<(), Box<dyn std::error::Error>> {
         state.code_bytes.as_slice(),
     );
 
-    // extract object_name, then execute subquery enum_2.scm on the stage2 node
-
     for m in matches {
         if m.captures.is_empty() {
             continue;
         }
 
-        let mut object_name = String::new();
         let mut enum_name = String::new();
         let mut enum_objects: Vec<(String, i32)> = Vec::new();
         let mut current_enum_field = String::new();
         let mut current_enum_value = String::new();
-        let mut stage2_node = None;
 
         for capture in m.captures {
             let node_text = capture
@@ -266,67 +336,19 @@ fn parse_enums(state: &mut State) -> Result<(), Box<dyn std::error::Error>> {
                 .utf8_text(state.code_bytes.as_slice())?
                 .to_string();
 
-            if capture.index == object_idx {
-                object_name = node_text;
-            } else if capture.index == enum_name_idx {
+            if capture.index == enum_name_idx {
                 enum_name = node_text;
             } else if capture.index == enum_field_idx {
                 current_enum_field = node_text;
             } else if capture.index == enum_value_idx {
                 current_enum_value = node_text;
-            } else if capture.index == stage2_idx {
-                stage2_node = Some(capture.node);
+                if current_enum_value.contains('e') {
+                    replace_exp(&mut current_enum_value);
+                }
             }
         }
 
         enum_objects.push((current_enum_field, current_enum_value.parse().unwrap()));
-
-        let Some(stage2_node) = stage2_node else {
-            panic!("stage2 node not found!: {object_name}");
-        };
-
-        let mut stage2_query_txt = std::fs::read_to_string("queries/enum_2.scm")?;
-
-        // replace "REPLACEME" with object_name
-
-        stage2_query_txt = stage2_query_txt.replace("REPLACEME", &object_name);
-
-        let stage2_query = Query::new(tree_sitter_javascript::language(), &stage2_query_txt)?;
-        let mut stage2_qc = QueryCursor::new();
-
-        let stage2_matches =
-            stage2_qc.matches(&stage2_query, stage2_node, state.code_bytes.as_slice());
-
-        let stage2_enum_field_idx = stage2_query.capture_index_for_name("enum_field").unwrap();
-        let stage2_enum_value_idx = stage2_query.capture_index_for_name("enum_value").unwrap();
-
-        for m in stage2_matches {
-            if m.captures.is_empty() {
-                continue;
-            }
-
-            let mut current_enum_field = String::new();
-            let mut current_enum_value = String::new();
-
-            for capture in m.captures {
-                let node_text = capture
-                    .node
-                    .utf8_text(state.code_bytes.as_slice())?
-                    .to_string();
-
-                if capture.index == stage2_enum_field_idx {
-                    current_enum_field = node_text;
-                } else if capture.index == stage2_enum_value_idx {
-                    current_enum_value = node_text;
-                }
-            }
-
-            if current_enum_value.contains('e') {
-                replace_exp(&mut current_enum_value);
-            }
-
-            enum_objects.push((current_enum_field, current_enum_value.parse().unwrap()));
-        }
 
         if state.enums.contains_key(&enum_name) {
             state
